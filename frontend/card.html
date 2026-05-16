@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>Bankkártyák</title>
+</head>
+<body>
+    <h1>Bankkártyák adatai</h1>
+    <p><a href="index.html">Vissza a főoldalra</a></p>
+    
+    <ul id="cards-list">Előkészítés...</ul>
+
+    <script>
+        fetch('http://localhost:8002/cards')
+            .then(res => res.json())
+            .then(data => {
+                const list = document.getElementById('cards-list');
+                list.innerHTML = '';
+                if(data.length === 0) { list.innerHTML = '<li>Nincs kártya az adatbázisban.</li>'; return; }
+
+                data.forEach(card => {
+                    const li = document.createElement('li');
+                    li.textContent = `Kártyaszám: ${card.card_number} ➡️ Kapcsolódó számla: ${card.account_number}`;
+                    list.appendChild(li);
+                });
+            })
+            .catch(err => document.getElementById('cards-list').innerHTML = 'Hiba a letöltés során.');
+    </script>
+</body>
+</html>

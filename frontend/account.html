@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>Bankszámlák</title>
+</head>
+<body>
+    <h1>Bankszámlák adatai</h1>
+    <p><a href="index.html">Vissza a főoldalra</a></p>
+    
+    <ul id="accounts-list">Előkészítés...</ul>
+
+    <script>
+        fetch('http://localhost:8001/accounts')
+            .then(res => res.json())
+            .then(data => {
+                const list = document.getElementById('accounts-list');
+                list.innerHTML = '';
+                if(data.length === 0) { list.innerHTML = '<li>Nincs számla az adatbázisban.</li>'; return; }
+                
+                data.forEach(acc => {
+                    const li = document.createElement('li');
+                    li.textContent = `Számlaszám: ${acc.account_number} | Egyenleg: ${acc.balance} Ft`;
+                    list.appendChild(li);
+                });
+            })
+            .catch(err => document.getElementById('accounts-list').innerHTML = 'Hiba a letöltés során.');
+    </script>
+</body>
+</html>

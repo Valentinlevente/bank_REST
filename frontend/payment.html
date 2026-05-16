@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>Fizetések</title>
+</head>
+<body>
+    <h1>Kártyás Fizetés Teszt</h1>
+    <p><a href="index.html">⬅️ Vissza a főoldalra</a></p>
+    
+    <h2>Új tranzakció indítása</h2>
+    <form id="pay-form">
+        <label>Terhelendő kártyaszám:</label><br>
+        <input type="text" id="source_card" value="1234-5678-9012-3456" required><br><br>
+        
+        <label>Kedvezményezett számlaszáma:</label><br>
+        <input type="text" id="target_account" value="5555666677778888" required><br><br>
+        
+        <label>Összeg (Ft):</label><br>
+        <input type="number" id="amount" value="5000" required><br><br>
+        
+        <button type="submit">Fizetés Végrehajtása</button>
+    </form>
+    
+    <p id="result-message" style="font-weight: bold;"></p>
+
+    <h2>Tranzakciós napló (Logs)</h2>
+    <ul id="payments-list">Előkészítés...</ul>
+
+    <script>
+        function loadLogs() {
+            fetch('http://localhost:8003/payments')
+                .then(res => res.json())
+                .then(data => {
+                    const list = document.getElementById('payments-list');
+                    list.innerHTML = '';
+                    data.reverse().forEach(p => {
+                        const li = document.createElement('li');
+                        li.textContent = `[ID: ${p.id}] Kártya: ${p.source_card} ➡️ Számla: ${p.target_account} | Összeg: ${p.amount} Ft | STÁTUSZ: ${p.status}`;
+                        list.appendChild(li);
+                    });
+                })
+                .catch(err => document.getElementById('payments-list').innerHTML = '❌ Nem sikerült a logok frissítése.');
+        }
+
+        document.getElementById('pay-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const msg = document.getElementById('result-message');
+            msg.textContent = "Tranzakció feldolgozása...";
+            msg.style.color = "black";
+
+            const payload = {
+                source_card: document.getElementById('source_card').value,
+                target_account: document.getElementById('target_account').value,
+                amount: parseInt(document.getElementById('amount').value)
+            };
+
+            fetch('http://localhost:8003/pay', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => { throw new Error(err.detail); });
+                }
+                return res.json();
+            })
+            .then(data => {
+                msg.textContent = `✅ Siker: ${data.message} (Tranzakció ID: ${data.transaction_id})`;
+                msg.style.color = "green";
+                loadLogs();
+            })
+            .catch(err => {
+                msg.textContent = `❌ Sikertelen fizetés: ${err.message}`;
+                msg.style.color = "red";
+                loadLogs();
+            });
+        });
+
+        loadLogs();
+    </script>
+</body>
+</html>

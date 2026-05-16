@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  account_service:
+    build: ./account_service
+    ports:
+      - "8001:8000"
+    restart: always
+
+  card_service:
+    build: ./card_service
+    ports:
+      - "8002:8000"
+    restart: always
+    depends_on:
+      - account_service
+
+  payment_service:
+    build: ./payment_service
+    ports:
+      - "8003:8000"
+    restart: always
+    depends_on:
+      - account_service
+      - card_service
+  
+  frontend_service:
+    build: ./frontend
+    ports:
+      - "8004:8000" 
+    restart: always
