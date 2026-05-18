@@ -2,29 +2,89 @@
 <html lang="hu">
 <head>
     <meta charset="UTF-8">
-    <title>Bankszámlák</title>
+    <title>Bankszámlák Kezelése</title>
 </head>
 <body>
     <h1>Bankszámlák adatai</h1>
     <p><a href="index.html">Vissza a főoldalra</a></p>
     
-    <ul id="accounts-list">Előkészítés...</ul>
+    <ul id="accounts-list">Betöltés...</ul>
+
+    <hr>
+    <h2>Egyenleg módosítása (Manuális tranzakció)</h2>
+    <form id="account-action-form">
+        <label>Számlaszám:</label><br>
+        <input type="text" id="acc_num" placeholder="pl. 1111222233334444" required><br><br>
+        
+        <label>Összeg (Ft):</label><br>
+        <input type="number" id="acc_amount" required><br><br>
+        
+        <button type="button" onclick="handleAction('deposit')">Befizetés (Deposit)</button>
+        <button type="button" onclick="handleAction('withdraw')">Kivétel (Withdraw)</button>
+    </form>
+    <p id="action-result" style="font-weight: bold;"></p>
+
+    <hr>
+    <h2>Számla szintű naplók (Account Logs)</h2>
+    <ul id="account-logs">Betöltés...</ul>
 
     <script>
-        fetch('http://localhost:8001/accounts')
-            .then(res => res.json())
-            .then(data => {
-                const list = document.getElementById('accounts-list');
-                list.innerHTML = '';
-                if(data.length === 0) { list.innerHTML = '<li>Nincs számla az adatbázisban.</li>'; return; }
-                
-                data.forEach(acc => {
-                    const li = document.createElement('li');
-                    li.textContent = `Számlaszám: ${acc.account_number} | Egyenleg: ${acc.balance} Ft`;
-                    list.appendChild(li);
+        const API_URL = 'http://localhost:8001';
+
+        function loadData() {
+            fetch(`${API_URL}/accounts`)
+                .then(res => res.json())
+                .then(data => {
+                    const list = document.getElementById('accounts-list');
+                    list.innerHTML = '';
+                    data.forEach(acc => {
+                        const li = document.createElement('li');
+                        li.textContent = `Számla: ${acc.account_number} | Egyenleg: ${acc.balance} Ft`;
+                        list.appendChild(li);
+                    });
                 });
+
+            fetch(`${API_URL}/accounts/logs`)
+                .then(res => res.json())
+                .then(data => {
+                    const list = document.getElementById('account-logs');
+                    list.innerHTML = '';
+                    data.reverse().forEach(log => {
+                        const li = document.createElement('li');
+                        li.textContent = `[${log.created_at.split('T')[1].substring(0,8)}] Számla: ${log.account_number} | Típus: ${log.type} | Összeg: ${log.amount} Ft | Eredmény: ${log.status}`;
+                        li.style.color = log.status === 'FAILED' ? 'red' : 'black';
+                        list.appendChild(li);
+                    });
+                });
+        }
+
+        function handleAction(actionType) {
+            const accNum = document.getElementById('acc_num').value;
+            const amount = document.getElementById('acc_amount').value;
+            const result = document.getElementById('action-result');
+
+            if(!accNum || !amount) { alert("Töltsd ki az adatokat!"); return; }
+
+            fetch(`${API_URL}/accounts/${accNum}/${actionType}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: parseInt(amount) })
             })
-            .catch(err => document.getElementById('accounts-list').innerHTML = 'Hiba a letöltés során.');
+            .then(async res => {
+                const data = await res.json();
+                if (res.ok) {
+                    result.textContent = `Siker: ${data.message} Új egyenleg: ${data.current_balance} Ft`;
+                    result.style.color = "green";
+                } else {
+                    result.textContent = `Hiba: ${data.detail}`;
+                    result.style.color = "red";
+                }
+                loadData();
+            })
+            .catch(err => { result.textContent = "Hiba a kommunikációban."; });
+        }
+
+        loadData();
     </script>
 </body>
 </html>

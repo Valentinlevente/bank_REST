@@ -6,7 +6,7 @@
 </head>
 <body>
     <h1>Kártyás Fizetés Teszt</h1>
-    <p><a href="index.html">⬅️ Vissza a főoldalra</a></p>
+    <p><a href="index.html">Vissza a főoldalra</a></p>
     
     <h2>Új tranzakció indítása</h2>
     <form id="pay-form">
@@ -36,11 +36,11 @@
                     list.innerHTML = '';
                     data.reverse().forEach(p => {
                         const li = document.createElement('li');
-                        li.textContent = `[ID: ${p.id}] Kártya: ${p.source_card} ➡️ Számla: ${p.target_account} | Összeg: ${p.amount} Ft | STÁTUSZ: ${p.status}`;
+                        li.textContent = `[ID: ${p.id}] Kártya: ${p.source_card}Számla: ${p.target_account} | Összeg: ${p.amount} Ft | STÁTUSZ: ${p.status}`;
                         list.appendChild(li);
                     });
                 })
-                .catch(err => document.getElementById('payments-list').innerHTML = '❌ Nem sikerült a logok frissítése.');
+                .catch(err => document.getElementById('payments-list').innerHTML = 'Nem sikerült a logok frissítése.');
         }
 
         document.getElementById('pay-form').addEventListener('submit', function(e) {
@@ -67,12 +67,12 @@
                 return res.json();
             })
             .then(data => {
-                msg.textContent = `✅ Siker: ${data.message} (Tranzakció ID: ${data.transaction_id})`;
+                msg.textContent = `Siker: ${data.message} (Tranzakció ID: ${data.transaction_id})`;
                 msg.style.color = "green";
                 loadLogs();
             })
             .catch(err => {
-                msg.textContent = `❌ Sikertelen fizetés: ${err.message}`;
+                msg.textContent = `Sikertelen fizetés: ${err.message}`;
                 msg.style.color = "red";
                 loadLogs();
             });

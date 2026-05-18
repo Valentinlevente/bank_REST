@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Integer, CheckConstraint
+import datetime
+from sqlalchemy import Column, DateTime, String, Integer, CheckConstraint
 from database import Base
 
 class Account(Base):
@@ -12,3 +13,13 @@ class Account(Base):
     __table_args__ = (
         CheckConstraint('balance >= 0', name='check_balance_positive'),
     )
+
+class AccountTransaction(Base):
+    __tablename__ = "account_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_number = Column(String, nullable=False, index=True)
+    type = Column(String, nullable=False)
+    amount = Column(Integer, nullable=False)
+    status = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

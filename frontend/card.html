@@ -8,23 +8,43 @@
     <h1>Bankkártyák adatai</h1>
     <p><a href="index.html">Vissza a főoldalra</a></p>
     
-    <ul id="cards-list">Előkészítés...</ul>
+    <ul id="cards-list">Betöltés...</ul>
+
+    <hr>
+    <h2>Kártya szintű terhelési naplók (Card Logs)</h2>
+    <ul id="card-logs">Betöltés...</ul>
 
     <script>
-        fetch('http://localhost:8002/cards')
-            .then(res => res.json())
-            .then(data => {
-                const list = document.getElementById('cards-list');
-                list.innerHTML = '';
-                if(data.length === 0) { list.innerHTML = '<li>Nincs kártya az adatbázisban.</li>'; return; }
+        const API_URL = 'http://localhost:8002';
 
-                data.forEach(card => {
-                    const li = document.createElement('li');
-                    li.textContent = `Kártyaszám: ${card.card_number} ➡️ Kapcsolódó számla: ${card.account_number}`;
-                    list.appendChild(li);
+        function loadCardData() {
+            fetch(`${API_URL}/cards`)
+                .then(res => res.json())
+                .then(data => {
+                    const list = document.getElementById('cards-list');
+                    list.innerHTML = '';
+                    data.forEach(card => {
+                        const li = document.createElement('li');
+                        li.textContent = `Kártya: ${card.card_number} Számla: ${card.account_number}`;
+                        list.appendChild(li);
+                    });
                 });
-            })
-            .catch(err => document.getElementById('cards-list').innerHTML = 'Hiba a letöltés során.');
+
+            fetch(`${API_URL}/cards/logs`)
+                .then(res => res.json())
+                .then(data => {
+                    const list = document.getElementById('card-logs');
+                    list.innerHTML = '';
+                    data.reverse().forEach(log => {
+                        const li = document.createElement('li');
+                        li.textContent = `[${log.created_at.split('T')[1].substring(0,8)}] Kártya: ${log.card_number} | Összeg: ${log.amount} Ft | Eredmény: ${log.status}`;
+                        li.style.color = log.status === 'FAILED' ? 'red' : 'black';
+                        list.appendChild(li);
+                    });
+                });
+        }
+
+        loadCardData();
     </script>
 </body>
 </html>
