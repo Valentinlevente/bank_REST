@@ -11,3 +11,4 @@ class RefundRequest(BaseModel):
 class TransactionResponse(BaseModel):
     success: bool
     message: str
+    account_number: str | None = None

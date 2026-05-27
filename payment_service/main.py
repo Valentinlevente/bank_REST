@@ -48,45 +48,78 @@ def process_payment(request: schemas.PaymentRequest, db: Session = Depends(datab
         error_detail = charge_resp.json().get("detail", "Kártya terhelése sikertelen.")
         raise HTTPException(status_code=400, detail=error_detail)
 
-    deposit_payload = {"amount": request.amount}
-    refund_payload = {"card_number": request.source_card, "amount": request.amount}
+    source_account = charge_resp.json().get("account_number")
+    if not source_account:
+        new_transaction.status = "FAILED"
+        db.commit()
+        raise HTTPException(status_code=500, detail="A kártya szolgáltatás nem adta vissza a forrás számlaazonosítót.")
 
-    def attempt_refund():
+    withdraw_payload = {"amount": request.amount}
+    try:
+        withdraw_resp = requests.post(
+            f"{ACCOUNT_SERVICE_URL}/accounts/{source_account}/withdraw",
+            json=withdraw_payload,
+        )
+    except requests.exceptions.ConnectionError:
+        new_transaction.status = "FAILED"
+        db.commit()
+        raise HTTPException(status_code=503, detail="Az account szolgáltatás nem elérhető, a tranzakció sikertelen.")
+
+    if withdraw_resp.status_code != 200:
+        new_transaction.status = "FAILED"
+        db.commit()
+
+        error_detail = withdraw_resp.json().get("detail", "A számlaterhelés sikertelen.")
+        raise HTTPException(status_code=400, detail=error_detail)
+
+    deposit_payload = {"amount": request.amount}
+
+    def attempt_compensation():
         try:
-            return requests.post(f"{CARD_SERVICE_URL}/refund", json=refund_payload)
+            return requests.post(
+                f"{ACCOUNT_SERVICE_URL}/accounts/{source_account}/deposit",
+                json=deposit_payload,
+            )
         except requests.exceptions.ConnectionError:
             return None
 
     try:
-        deposit_resp = requests.post(f"{ACCOUNT_SERVICE_URL}/accounts/{request.target_account}/deposit", json=deposit_payload)
+        deposit_resp = requests.post(
+            f"{ACCOUNT_SERVICE_URL}/accounts/{request.target_account}/deposit",
+            json=deposit_payload,
+        )
     except requests.exceptions.ConnectionError:
-        refund_resp = attempt_refund()
-        new_transaction.status = "FAILED_COMPENSATION_REQUESTED"
-        db.commit()
-
-        if refund_resp is None:
+        compensation_resp = attempt_compensation()
+        if compensation_resp is None or compensation_resp.status_code != 200:
+            new_transaction.status = "FAILED_COMPENSATION_REQUESTED"
+            db.commit()
             raise HTTPException(
                 status_code=503,
-                detail="A cél számla nem elérhető, és a kompenzációs visszatérítés nem hajtható végre. Ellenőrizd a tranzakciót."
+                detail="A cél számla nem elérhető, és a kompenzáció sem hajtható végre. Ellenőrizd a tranzakciót.",
             )
 
+        new_transaction.status = "FAILED"
+        db.commit()
         raise HTTPException(
             status_code=500,
-            detail="A cél számla nem elérhető. A terhelést visszavontuk (kompenzáció)."
+            detail="A cél számla nem elérhető. A terhelést visszavontuk (kompenzáció).",
         )
 
     if deposit_resp.status_code != 200:
-        refund_resp = attempt_refund()
-        new_transaction.status = "FAILED_COMPENSATION_REQUESTED"
+        compensation_resp = attempt_compensation()
+        if compensation_resp is None or compensation_resp.status_code != 200:
+            new_transaction.status = "FAILED_COMPENSATION_REQUESTED"
+            db.commit()
+            raise HTTPException(
+                status_code=500,
+                detail="A cél számla nem elérhető, és a kompenzáció nem sikerült. Ellenőrizd a tranzakciót.",
+            )
+
+        new_transaction.status = "FAILED"
         db.commit()
-
-        if refund_resp is None or refund_resp.status_code != 200:
-            detail = "A cél számla nem elérhető, és a kompenzációs visszatérítés nem sikerült. Ellenőrizd a tranzakciót."
-            raise HTTPException(status_code=500, detail=detail)
-
         raise HTTPException(
             status_code=500,
-            detail="A cél számla nem elérhető. A terhelést visszavontuk (kompenzáció)."
+            detail="A cél számla nem elérhető. A terhelést visszavontuk (kompenzáció).",
         )
 
     new_transaction.status = "SUCCESS"

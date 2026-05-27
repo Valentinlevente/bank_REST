@@ -1,7 +1,6 @@
 ﻿from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-import requests
 import database, models, schemas
 
 models.Base.metadata.create_all(bind=database.engine)
@@ -15,8 +14,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-ACCOUNT_SERVICE_URL = "http://account_service:8000"
 
 @app.get("/cards")
 def list_all_cards(db: Session = Depends(database.get_db)):
@@ -37,31 +34,15 @@ def charge_card(request: schemas.ChargeRequest, db: Session = Depends(database.g
         db.commit()
         raise HTTPException(status_code=404, detail="A megadott bankkártya nem található.")
 
-    target_url = f"{ACCOUNT_SERVICE_URL}/accounts/{card.account_number}/withdraw"
-    payload = {"amount": request.amount}
+    log = models.CardTransaction(card_number=request.card_number, amount=request.amount, status="SUCCESS")
+    db.add(log)
+    db.commit()
 
-    try:
-        response = requests.post(target_url, json=payload)
-        
-        if response.status_code != 200:
-            log = models.CardTransaction(card_number=request.card_number, amount=request.amount, status="FAILED")
-            db.add(log)
-            db.commit()
-            
-            error_detail = response.json().get("detail", "Ismeretlen hiba a terhelés során.")
-            raise HTTPException(status_code=response.status_code, detail=error_detail)
-            
-        log = models.CardTransaction(card_number=request.card_number, amount=request.amount, status="SUCCESS")
-        db.add(log)
-        db.commit()
-        
-        return {"success": True, "message": f"Sikeres kártyás terhelés. Cél számla: {card.account_number}"}
-        
-    except requests.exceptions.ConnectionError:
-        log = models.CardTransaction(card_number=request.card_number, amount=request.amount, status="FAILED")
-        db.add(log)
-        db.commit()
-        raise HTTPException(status_code=503, detail="A Bankszámla szolgáltatás jelenleg nem elérhető.")
+    return {
+        "success": True,
+        "message": f"A kártya érvényes, és a kapcsolt számla: {card.account_number}.",
+        "account_number": card.account_number,
+    }
 
 
 @app.post("/refund", response_model=schemas.TransactionResponse)
@@ -75,28 +56,12 @@ def refund_card(request: schemas.RefundRequest, db: Session = Depends(database.g
         db.commit()
         raise HTTPException(status_code=404, detail="A megadott bankkártya nem található.")
 
-    target_url = f"{ACCOUNT_SERVICE_URL}/accounts/{card.account_number}/deposit"
-    payload = {"amount": request.amount}
+    log = models.CardTransaction(card_number=request.card_number, amount=request.amount, status="SUCCESS")
+    db.add(log)
+    db.commit()
 
-    try:
-        response = requests.post(target_url, json=payload)
-        
-        if response.status_code != 200:
-            log = models.CardTransaction(card_number=request.card_number, amount=request.amount, status="FAILED")
-            db.add(log)
-            db.commit()
-            
-            error_detail = response.json().get("detail", "Ismeretlen hiba a visszatérítés során.")
-            raise HTTPException(status_code=response.status_code, detail=error_detail)
-            
-        log = models.CardTransaction(card_number=request.card_number, amount=request.amount, status="SUCCESS")
-        db.add(log)
-        db.commit()
-        
-        return {"success": True, "message": f"Sikeres visszatérítés. Forrás számla: {card.account_number}"}
-        
-    except requests.exceptions.ConnectionError:
-        log = models.CardTransaction(card_number=request.card_number, amount=request.amount, status="FAILED")
-        db.add(log)
-        db.commit()
-        raise HTTPException(status_code=503, detail="A Bankszámla szolgáltatás jelenleg nem elérhető.")
+    return {
+        "success": True,
+        "message": f"A kártya visszatérítéshez kapcsolódó számla: {card.account_number}.",
+        "account_number": card.account_number,
+    }
