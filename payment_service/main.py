@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+﻿from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import requests
@@ -32,41 +32,72 @@ def process_payment(request: schemas.PaymentRequest, db: Session = Depends(datab
     db.commit()
     db.refresh(new_transaction)
 
+    charge_payload = {"card_number": request.source_card, "amount": request.amount}
+
     try:
-        charge_payload = {"card_number": request.source_card, "amount": request.amount}
         charge_resp = requests.post(f"{CARD_SERVICE_URL}/charge", json=charge_payload)
-        
-        if charge_resp.status_code != 200:
-            new_transaction.status = "FAILED"
-            db.commit()
-            
-            error_detail = charge_resp.json().get("detail", "Kártya terhelése sikertelen.")
-            raise HTTPException(status_code=400, detail=error_detail)
-
-        deposit_payload = {"amount": request.amount}
-        deposit_resp = requests.post(f"{ACCOUNT_SERVICE_URL}/accounts/{request.target_account}/deposit", json=deposit_payload)
-
-        if deposit_resp.status_code != 200:
-            new_transaction.status = "FAILED"
-            db.commit()
-            raise HTTPException(
-                status_code=500, 
-                detail="A cél számla nem elérhető. A terhelést visszavontuk (kompenzáció)."
-            )
-        new_transaction.status = "SUCCESS"
-        db.commit()
-        
-        return {
-            "transaction_id": new_transaction.id,
-            "status": "SUCCESS",
-            "message": "Sikeres bankkártyás fizetés!"
-        }
-
     except requests.exceptions.ConnectionError:
         new_transaction.status = "FAILED"
         db.commit()
-        raise HTTPException(status_code=503, detail="Hálózati hiba. A tranzakció sikertelen.")
+        raise HTTPException(status_code=503, detail="A kártya szolgáltatás nem elérhető, a tranzakció sikertelen.")
+
+    if charge_resp.status_code != 200:
+        new_transaction.status = "FAILED"
+        db.commit()
+
+        error_detail = charge_resp.json().get("detail", "Kártya terhelése sikertelen.")
+        raise HTTPException(status_code=400, detail=error_detail)
+
+    deposit_payload = {"amount": request.amount}
+    refund_payload = {"card_number": request.source_card, "amount": request.amount}
+
+    def attempt_refund():
+        try:
+            return requests.post(f"{CARD_SERVICE_URL}/refund", json=refund_payload)
+        except requests.exceptions.ConnectionError:
+            return None
+
+    try:
+        deposit_resp = requests.post(f"{ACCOUNT_SERVICE_URL}/accounts/{request.target_account}/deposit", json=deposit_payload)
+    except requests.exceptions.ConnectionError:
+        refund_resp = attempt_refund()
+        new_transaction.status = "FAILED_COMPENSATION_REQUESTED"
+        db.commit()
+
+        if refund_resp is None:
+            raise HTTPException(
+                status_code=503,
+                detail="A cél számla nem elérhető, és a kompenzációs visszatérítés nem hajtható végre. Ellenőrizd a tranzakciót."
+            )
+
+        raise HTTPException(
+            status_code=500,
+            detail="A cél számla nem elérhető. A terhelést visszavontuk (kompenzáció)."
+        )
+
+    if deposit_resp.status_code != 200:
+        refund_resp = attempt_refund()
+        new_transaction.status = "FAILED_COMPENSATION_REQUESTED"
+        db.commit()
+
+        if refund_resp is None or refund_resp.status_code != 200:
+            detail = "A cél számla nem elérhető, és a kompenzációs visszatérítés nem sikerült. Ellenőrizd a tranzakciót."
+            raise HTTPException(status_code=500, detail=detail)
+
+        raise HTTPException(
+            status_code=500,
+            detail="A cél számla nem elérhető. A terhelést visszavontuk (kompenzáció)."
+        )
+
+    new_transaction.status = "SUCCESS"
+    db.commit()
     
+    return {
+        "transaction_id": new_transaction.id,
+        "status": "SUCCESS",
+        "message": "Sikeres bankkártyás fizetés!"
+    }
+
 @app.get("/payments")
 def list_all_payments(db: Session = Depends(database.get_db)):
     return db.query(models.PaymentTransaction).all()
